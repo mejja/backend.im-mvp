@@ -1,0 +1,33 @@
+version: "3.8"
+services:
+  gitea:
+    image: gitea/gitea:latest
+    networks:
+      - kind
+    ports:
+      - "3000:3000"
+      - "222:22"
+    volumes:
+      - ./gitea-data:/data
+
+  control:
+    build:
+      context: .
+      dockerfile: control/Dockerfile
+    networks:
+      - kind
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./control/scripts:/scripts
+      - ./templates:/templates
+      - ~/.kube/config:/root/.kube/config
+
+  client:
+    build: ./client
+    networks:
+      - kind
+    depends_on:
+      - control
+networks:
+  kind:

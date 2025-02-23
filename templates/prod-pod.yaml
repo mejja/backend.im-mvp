@@ -1,0 +1,80 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prod-app
+  namespace: ${Namespace}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prod-app
+  template:
+    metadata:
+      labels:
+        app: prod-app
+    spec:
+      volumes:
+        - name: code-volume
+          persistentVolumeClaim:
+            claimName: ${Namespace}
+      containers:
+      - name: prod-container
+        image: obimadu/im-base-fastapi
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            # List directory contents for debugging
+            echo "Contents of /app/repo:" && ls -la /app/repo &&
+
+            # Install dependencies with virtual environment
+            python -m venv /app/venv && \
+            . /app/venv/bin/activate && \
+            pip install --cache-dir /app/.pip-cache -r /app/repo/requirements.txt && \
+
+            # Run the actual application (main.py)
+            cd /app/repo && \
+            uvicorn main:app --host 0.0.0.0 --port 8080
+
+            # Keep container alive for debugging if needed
+            # tail -f /dev/null
+        ports:
+          - containerPort: 8080
+        volumeMounts:
+          - name: code-volume
+            mountPath: /app
+      restartPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prod-service
+  namespace: ${Namespace}
+spec:
+  selector:
+    app: prod-app
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: prod-ingress
+  namespace: ${Namespace}
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"  # Disable HTTPS redirect
+spec:
+  ingressClassName: nginx  # REQUIRED
+  rules:
+    - host: "${Namespace}.yourdomain.com"
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: prod-service
+                port:
+                  number: 80

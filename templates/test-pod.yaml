@@ -1,0 +1,46 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ${PVCName}
+  namespace: ${Namespace}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-app
+  namespace: ${Namespace}
+spec:
+  volumes:
+    - name: code-volume
+      persistentVolumeClaim:
+        claimName: ${PVCName}
+  containers:
+    - name: test-container
+      image: obimadu/im-base-fastapi
+      command: ["/bin/sh", "-c"]
+      args:
+        - |
+          # Install Git if not present in base image
+          if ! command -v git &> /dev/null; then
+            apt-get update && apt-get install -y git
+          fi &&
+
+          # Clone repo into persistent volume
+          git clone ${RepoURL} /app/repo &&
+
+          # Navigate to repo and run tests
+          cd /app/repo &&
+          pip install -r requirements.txt &&
+          pytest tests/ &&
+
+          # Keep container running for debugging (optional)
+          tail -f /dev/null
+      volumeMounts:
+        - name: code-volume
+          mountPath: /app
